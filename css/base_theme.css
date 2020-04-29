@@ -1,1 +1,125 @@
+.box{
+    display: -webkit-box;           
+    display: -moz-box;         
+    display: -ms-flexbox;      
+    display: -webkit-flex;     
+    display: flex;   
+    height:15%;
+    background-color: lightgray;
+}
 
+body{
+    background-color: lightgray;
+}
+
+.title {
+    width: 20%;
+    padding:10px;
+    text-align:center;
+    color:#000000;
+    font-family: arial, sans-serif;
+}
+
+.buttons {
+    align-self: center;
+    float:right;
+
+}
+.buttons button{
+    background-color: darkblue;
+    color: cornsilk;
+}
+input[type=radio]{
+    transform:scale(2);
+}
+input[type='radio']:checked:after {
+    width: 10px;
+    height: 10px;
+    border-radius: 10px;
+
+    position: relative;
+    content: '';
+    background-color: #09d334;
+    display: inline-block;
+    visibility: visible;
+    border: 1px solid black;
+}
+
+.select_container {
+    margin-top: 30px;
+    margin-left: 50px;
+    display: flex;
+}
+
+.importance_title{
+    font-family: Calibri;
+    font-size: 30px;
+    text-align: center;
+    margin-left: 180px;
+    vertical-align: middle;
+}
+
+.importance_text{
+    font-family: Calibri;
+    font-size: 30px;
+    text-align: center;
+    vertical-align: middle;
+    margin-left: 250px;
+    color: grey;
+}
+
+.select {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 15px;
+    margin-left: 250px;
+    width: 200px;
+}
+.select select {
+    font-family: Calibri;
+    font-size: 20px;
+    display: inline-block;
+    width: 100%;
+    height: 50px;
+    cursor: pointer;
+    padding: 10px 15px;
+    outline: 0;
+    border: 0;
+    border-radius: 0;
+    background: #e6e6e6;
+    color: #7b7b7b;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+.select select::-ms-expand {
+    display: none;
+}
+.select select:hover,
+.select select:focus {
+    color: #000;
+    background: #ccc;
+}
+.select select:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+.select_arrow {
+    position: absolute;
+    top: 20px;
+    right: 15px;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    border-style: solid;
+    border-width: 8px 5px 0 5px;
+    border-color: #7b7b7b transparent transparent transparent;
+}
+.select select:hover ~ .select_arrow,
+.select select:focus ~ .select_arrow {
+    border-top-color: #000;
+}
+.select select:disabled ~ .select_arrow {
+    border-top-color: #ccc;
+} 
+  
