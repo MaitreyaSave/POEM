@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<!--  Database images are taken from:
+      https://unsplash.com/s/photos/human?orientation=squarish
+-->
+<html>
+  <head>
+    <title>Email Interface</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="css/base_theme.css">
+  </head>
+  <body>
+    
+    <div class="box">
+
+      <div class="title">
+        <p id="body_title">Email Interface</p>
+      </div>
+      <div class="buttons">
+        <!--Add buttons to initiate auth sequence and sign out-->
+        <button id="authorize_button" style="display: none;">Authorize</button>
+        <button id="signout_button" style="display: none;">Sign Out</button>
+      </div>
+
+    </div>
+    
+
+  
+    <pre id="content" style="white-space: pre-wrap;"></pre>
+
+    <script src="js/konva.js"></script>
+    <script src="js/md5.min.js"></script>
+
+
+    
+    <div class="importance_title">
+      Importance
+    </div>  
+    <div class="select_container">
+      <div class="importance_text">
+        More Important 
+      </div>  
+      <div class = "select">
+        <select onchange = "refreshStage()" id = "drop_down_selector" disabled = true>
+          <option>Total Email Size</option>
+          <option>Sent Email Size</option>
+          <option>Response Latency</option>
+          <option>Significance</option>
+          <option>Urgency</option>
+  
+        </select>
+        <div class="select_arrow"></div>
+      </div>
+      <div class="importance_text">
+        Less Important 
+      </div>  
+    </div>
+    
+
+    <div id="container">
+
+    </div>
+    <div id="emails_container">
+
+    </div>
+
+
+
+    <script type="text/javascript">
+
+      class StratifiedSample{
+        constructor(cnt){
+          this.cnt = cnt;
+        }
+        setHS(hmin, hmax, smin, smax){
+          this.h_min = hmin;
+          this.h_max = hmax;
+          this.s_min = smin;
+          this.s_max = smax;
+        }
+        getHMin(){
+          return this.h_min;
+        }
+        getHMax(){
+          return this.h_max;
+        }
+        getSMin(){
+          return this.s_min;
+        }
+        getSMax(){
+          return this.s_max;
+        }
+        getCnt(){
+          return this.cnt;
+        }
+        updateCnt(cnt){
+          this.cnt = cnt;
+        }
+        increaseCnt(){
+          this.cnt = this.cnt + 1;
+        }
+      }
+
+      class EmailRect{
+        constructor(rec){
+          this.email_rec = rec;
+        }
+        getOwnEmailRec(){
+          return this.email_rec;
+        }
+        setEmailRecText(text){
+          this.email_rec_text = text;
+        }
+        getEmailRecText(){
+          return this.email_rec_text;
+        }
+        setEmailRecTextRight(text){
+          this.email_rec_text_right = text;
+        }
+        getEmailRecTextRight(){
+          return this.email_rec_text_right;
+        }
+        setFromEmail(email){
+          this.from_email = email;
+        }
+        getFromEmail(){
+          return this.from_email;
+        }
+        
+      }
+      class Person {
+        constructor(email_address){
+          this.latency_avg =-1;
+          this.email_message_sender_map = new Map();
+          this.email_address = email_address;
+          this.email_messages_list = [];
+          this.selected = false;
+          this.email_rec_list = [];
+          this.thread_map = new Map();
+          this.cumulative_email_size = 0;
+          this.cumulative_sent_email_size = 0;
+          this.num_emails = 0;
+          this.num_received_emails = 0;
+          this.num_sent_emails = 0;
+        }
+        getEmailAddress(){
+          return this.email_address;
+        }
+        addEmailMessage(message,sender){
+          this.email_messages_list.push(message);
+          // sender = 0 means user sent
+          // sender = 1 means user received
+          this.email_message_sender_map.set(message.id,sender);
+        }
+        getEmailMessageList(){
+          return this.email_messages_list;
+        }
+        getEmailMessageSenderMap(){
+          return this.email_message_sender_map;
+        }
+        setAverageLatency(latency_avg){
+          this.latency_avg = latency_avg;
+        }
+        getAverageLatency(){
+          return this.latency_avg;
+        }
+        setLatestLatency(latency_latest){{
+          this.latency_latest = latency_latest;
+        }}
+        getLatestLatency(){
+          return this.latency_latest;
+        }
+        getUrgency(){
+          if(this.latency_avg != null && this.latency_avg != 0 && this.latency_latest != null){
+            return this.latency_latest/this.latency_avg;
+          }
+          else{
+            return 100;
+          }
+        }
+        getSignificance(){
+          // if(this.num_received_emails == 0){
+          //   return Infinity;
+          // }
+          // if(this.num_sent_emails == 0){
+          //   return -Infinity;
+          // }
+          return Math.log2(this.num_sent_emails + 1) + Math.log2(this.num_emails + 1) * Math.log2((this.num_sent_emails + 1) / (this.num_received_emails + 1));
+        }
+        updateSentEmails(cnt){
+          this.num_sent_emails += cnt;
+        }
+        updateReceivedEmails(cnt){
+          this.num_received_emails += cnt;
+        }
+        getSentEmailCount(){
+          return this.num_sent_emails;
+        }
+        getReceivedEmailCount(){
+          return this.num_received_emails;
+        }
+        setX(x){
+          this.x = x;
+        }
+        getX(){
+          return this.x;
+        }
+        setY(y){
+          this.y = y;
+        }
+        getY(){
+          return this.y;
+        }
+        setColor(color){
+          this.color = color;
+        }
+        getColor(){
+          return this.color;
+        }
+        setEmailTimeLatest(email_time){
+          this.latest_email_time = email_time;
+        }
+        getEmailTimeLatest(){
+          return this.latest_email_time;
+        }
+        setSentEmailTimeLatest(email_time){
+          this.latest_sent_email_time = email_time;
+        }
+        getSentEmailTimeLatest(){
+          return this.latest_sent_email_time;
+        }
+        setNumberOfEmails(num){
+          this.num_emails = num;
+        }
+        getNumberOfEmails(){
+          return this.num_emails;
+        }
+        setPictureURL(url){
+          this.picture_url = url;
+        }
+        getPictureURL(){
+          return this.picture_url;
+        }
+        setInitials(initials){
+          this.initials = initials;
+        }
+        getInitials(){
+          return this.initials;
+        }
+        setSelected(selection_bool){
+          this.selected = selection_bool;
+        }
+        getSelected(){
+          return this.selected;
+        }
+        addEmailRects(rec,text,text_right,thread_id,from_email){
+          var email_rec = new EmailRect(rec);
+          email_rec.setEmailRecText(text);
+          email_rec.setEmailRecTextRight(text_right);
+          email_rec.setFromEmail(from_email);
+          //
+          var email_map_list = this.thread_map.get(thread_id);
+          if(email_map_list == null){
+            email_map_list = [];
+          }
+          email_map_list.push(email_rec);
+          //
+          this.email_rec_list.push(email_rec);
+          this.num_emails = this.email_rec_list.length;
+          this.thread_map.set(thread_id,email_map_list);
+        }
+        getEmailRects(){
+          return this.email_rec_list;
+        }
+        getThreadMap(){
+          return this.thread_map;
+        }
+        addEmailSize(size){
+          this.cumulative_email_size += size;
+        }
+        getCumulativeEmailSize(){
+          return this.cumulative_email_size;
+        }
+        addSentEmailSize(size){
+          this.cumulative_sent_email_size += size;
+        }
+        getCumulativeSentEmailSize(){
+          return this.cumulative_sent_email_size;
+        }
+        setPersonCircle(cir){
+          this.person_circle = cir;
+        }
+        getPersonCircle(){
+          return this.person_circle;
+        }
+        setPersonCircleText(txt){
+          this.person_circle_text = txt;
+        }
+        getPersonCircleText(){
+          return this.person_circle_text;
+        }
+        setPersonCircleTooltip(tooltip){
+          this.person_circle_tooltip = tooltip;
+        }
+        getPersonCircleTooltip(){
+          return this.person_circle_tooltip;
+        }
+        setPersonCircleTooltip1(tooltip){
+          this.person_circle_tooltip1 = tooltip;
+        }
+        getPersonCircleTooltip1(){
+          return this.person_circle_tooltip1;
+        }
+        setAnim(anim){
+          this.anim = anim;
+        }
+        getAnim(){
+          return this.anim;
+        }
+      }
+
+      var h_max = 1;
+      var s_max = 1;
+      var h_default = 0.1;
+      var s_default = 0.1;
+      var v_default = 1;
+      var h_random = h_default;
+      var s_random = s_default;
+
+      var local_image_counter = 1;
+      var localImagesFlag = true;
+
+      var stratifiedSamplingFlag = true;
+      var stratifiedSamplesCount = 4;
+      var stratifiedSampleMap = new Map();
+      var stratifiedHPos = 0;
+      var stratifiedSPos = 0;
+      var stratifiedMapCounter = 0;
+      var stratifiedStep = (h_max - h_default) / stratifiedSamplesCount;
+      for(stratifiedHPos = 0; stratifiedHPos <  stratifiedSamplesCount; stratifiedHPos++){
+        var hmin = h_random;
+        var hmax = h_random + stratifiedStep;
+        for(stratifiedSPos = 0; stratifiedSPos < stratifiedSamplesCount; stratifiedSPos++){
+          var sample = new StratifiedSample(0);
+          var smin = s_random;
+          var smax = s_random + stratifiedStep;
+          sample.setHS(hmin,hmax,smin,smax);
+          stratifiedSampleMap.set(stratifiedMapCounter,sample);
+          stratifiedMapCounter++;
+          s_random += stratifiedStep;
+        }
+        h_random += stratifiedStep;
+        s_random = s_default;
+      }
+
+      h_random = h_default;
+      s_random = s_default;
+
+      var tooltipRectSideLength = 100;
+      var yOffset = 60;
+      var xOffset = 120;
+
+      var user_profile;
+      var nextPageToken;
+      var totalMessagesCount = 0;
+      var maxMessageCount = 1000;
+
+      var iter = 0;
+      var email_response_list = [];
+      var email_address_map = new Map();
+      var self;
+    
+
+      var min_time = new Date();
+      
+      var max_time = min_time-365;
+
+      // var min_time_diff = 0;
+      
+      var max_time_diff = 24*3600*1000;
+      console.log("max time diff",max_time_diff);
+
+      var min_email_size = 0;
+      var max_email_size = min_email_size;
+      var min_sent_email_size = 0;
+      var max_sent_email_size = min_sent_email_size;
+      var min_avg_latency = 0;
+      var max_avg_latency = 0;
+      var min_urgency = 0;
+      var max_urgency = 0;
+      var min_significance = 0;
+      var max_significance = 0;
+
+
+      var width = window.innerWidth - 50;
+      var height = window.innerHeight;
+      var stageColor = getRGBString(255,255,255);
+
+      var email_person_circle_radius = 2, email_person_circle_base_radius = 10, circle_max_radius = 40;
+
+
+      var stage = new Konva.Stage({
+        container: 'container',
+        width: width,
+        height: yOffset + 600
+      });
+      var layer = new Konva.Layer();
+      var stageRect =  new Konva.Rect({ 
+        x: xOffset + 130,
+        y: yOffset + 30,
+        width: width - 270,
+        height: height + yOffset,
+        fill: stageColor,
+        listening: true  // listen for clicks on the stage rectangle
+      })
+      layer.add(stageRect);
+
+      var maxCircleText = new Konva.Text({
+        x: 20,
+        y: yOffset + 30,
+        text: '# emails:\n\nMax (15+)',
+        fontSize: 20,
+        fontFamily: 'Calibri',
+        fill: 'grey'
+      });
+
+      var maxCircleLegend = new Konva.Circle({
+        x: maxCircleText.x() + 40,
+        y: maxCircleText.y() + 120,
+        radius: circle_max_radius,
+        stroke: 'black',
+        fill: 'green',
+        draggable: false,
+        hue: 0,
+        saturation: 2,
+        strokeWidth: 2
+      });
+
+      var avgCircleLegend = new Konva.Circle({
+        x: maxCircleLegend.x(),
+        y: maxCircleLegend.y() + maxCircleLegend.radius() + 50,
+        radius: (email_person_circle_base_radius + circle_max_radius) / 2,
+        stroke: 'black',
+        fill: 'green',
+        draggable: false,
+        hue: 0,
+        saturation: 2,
+        strokeWidth: 2
+      });
+
+      var minCircleLegend = new Konva.Circle({
+        x: avgCircleLegend.x(),
+        y:  avgCircleLegend.y() + avgCircleLegend.radius() + 50,
+        radius: email_person_circle_base_radius,
+        stroke: 'black',
+        fill: 'green',
+        draggable: false,
+        hue: 0,
+        saturation: 2,
+        strokeWidth: 2
+      });
+
+      var minCircleText = new Konva.Text({
+        x: maxCircleText.x(),
+        y: minCircleLegend.y() + minCircleLegend.radius() + 30,
+        text: 'Min (1)',
+        fontSize: 20,
+        fontFamily: 'Calibri',
+        fill: 'grey'
+      });
+
+
+      layer.add(maxCircleText);
+      layer.add(maxCircleLegend);
+      layer.add(avgCircleLegend);
+      layer.add(minCircleLegend);
+      layer.add(minCircleText);
+
+      var progressAngle = 0;
+      var progressPercent = 0;
+      var progressBarLayer = new Konva.Layer();
+
+      var progressArc = new Konva.Arc({
+        x: stage.width() / 2,
+        y: stage.height() / 2,
+        innerRadius: 50,
+        outerRadius: 70,
+        angle: Math.max(0,progressAngle),
+        fill: 'green',
+        stroke: 'black',
+        strokeWidth: 2
+      });
+
+      var progressPercentText = new Konva.Text({
+        x: stage.width() / 2 - 20,
+        y: stage.height() / 2 - 15,
+        text: '0%',
+        fontSize: 30,
+        fontFamily: 'Calibri',
+        fill: 'green'
+      });
+
+      progressBarLayer.add(progressArc);
+      progressBarLayer.add(progressPercentText);
+      stage.add(progressBarLayer);
+      progressArc.hide();
+      progressPercentText.hide();
+      progressBarLayer.draw();
+
+      // Client ID and API key from the Developer Console
+      var CLIENT_ID = '197645677785-4qt0a8jag68i7c1m83le04n2q8cjcmnd.apps.googleusercontent.com';
+      var API_KEY = 'AIzaSyBA8Fpr0yJCRPSQKeopGNIbfSba3lzo1kY';
+
+      // Array of API discovery doc URLs for APIs used by the quickstart
+      var DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"];
+
+      // Authorization scopes required by the API; multiple scopes can be
+      // included, separated by spaces.
+      var SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
+
+      var authorizeButton = document.getElementById('authorize_button');
+      var signoutButton = document.getElementById('signout_button');
+
+      /**
+       *  On load, called to load the auth2 library and API client library.
+       */
+      function handleClientLoad() {
+        gapi.load('client:auth2', initClient);
+      }
+
+      /**
+       *  Initializes the API client library and sets up sign-in state
+       *  listeners.
+       */
+      function initClient() {
+        gapi.client.init({
+          apiKey: API_KEY,
+          clientId: CLIENT_ID,
+          discoveryDocs: DISCOVERY_DOCS,
+          scope: SCOPES
+        }).then(function () {
+          // Listen for sign-in state changes.
+          gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
+
+          // Handle the initial sign-in state.
+          updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+          authorizeButton.onclick = handleAuthClick;
+          signoutButton.onclick = handleSignoutClick;
+        }, function(error) {
+          appendPre(JSON.stringify(error, null, 2));
+        });
+      }
+
+      /**
+       *  Called when the signed in status changes, to update the UI
+       *  appropriately. After a sign-in, the API is called.
+       */
+      function updateSigninStatus(isSignedIn) {
+        if (isSignedIn) {
+          authorizeButton.style.display = 'none';
+          signoutButton.style.display = 'block';
+          listMessages();
+          var profile = gapi.auth2.getAuthInstance().currentUser.get().getBasicProfile();
+          user_profile = profile;
+          self = new Person(user_profile.getEmail());
+          updateBodyTitle("Welcome "+ profile.getName() + "<br>" + profile.getEmail());
+        } else {
+          authorizeButton.style.display = 'block';
+          signoutButton.style.display = 'none';
+          updateBodyTitle("Email Interface");
+        }
+      }
+
+      /**
+       *  Sign in the user upon button click.
+       */
+      function handleAuthClick(event) {
+        gapi.auth2.getAuthInstance().signIn();
+      }
+
+      /**
+       *  Sign out the user upon button click.
+       */
+      function handleSignoutClick(event) {
+        gapi.auth2.getAuthInstance().signOut();
+        location.reload();
+      }
+
+      /**
+       * Append a pre element to the body containing the given message
+       * as its text node. Used to display the results of the API call.
+       *
+       * @param {string} message Text to be placed in pre element.
+       */
+      function appendPre(message) {
+        var pre = document.getElementById('content');
+        var textContent = document.createTextNode(message + '\n');
+        pre.appendChild(textContent);
+      }
+
+      function updateBodyTitle(text){
+        document.getElementById("body_title").innerHTML = text;
+      }
+
+      // Start-C: Code to fetch body of email:
+
+      function getBody(message) {
+        var encodedBody = '';
+        if(typeof message.parts === 'undefined')
+        {
+          encodedBody = message.body.data;
+        }
+        else
+        {
+          encodedBody = getHTMLPart(message.parts);
+        }
+        encodedBody = encodedBody.replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '');
+        return decodeURIComponent(escape(window.atob(encodedBody)));
+      }
+
+      function getHTMLPart(arr) {
+        for(var x = 0; x <= arr.length; x++)
+        {
+          if(typeof arr[x].parts === 'undefined')
+          {
+            if(arr[x].mimeType === 'text/html')
+            {
+              return arr[x].body.data;
+            }
+          }
+          else
+          {
+            return getHTMLPart(arr[x].parts);
+          }
+        }
+        return '';
+      }
+
+      // End-C
+
+      function imageExists(image_url){
+        var http = new XMLHttpRequest();
+
+        http.open('HEAD', image_url, false);
+        http.send();
+
+        return http.status != 404;
+      }
+
+      function HSVtoRGB(h, s, v) {
+        var r, g, b, i, f, p, q, t;
+        if (arguments.length === 1) {
+            s = h.s, v = h.v, h = h.h;
+        }
+        i = Math.floor(h * 6);
+        f = h * 6 - i;
+        p = v * (1 - s);
+        q = v * (1 - f * s);
+        t = v * (1 - (1 - f) * s);
+        switch (i % 6) {
+            case 0: r = v, g = t, b = p; break;
+            case 1: r = q, g = v, b = p; break;
+            case 2: r = p, g = v, b = t; break;
+            case 3: r = p, g = q, b = v; break;
+            case 4: r = t, g = p, b = v; break;
+            case 5: r = v, g = p, b = q; break;
+        }
+        return {
+            r: Math.round(r * 255),
+            g: Math.round(g * 255),
+            b: Math.round(b * 255)
+        };
+      }
+
+      function getRGBString(r,g,b){
+        return 'rgb('+r+','+g+','+b+')';
+      }
+
+      function getRandomInRange(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      function getRandomIntInRange(min, max) {
+        return Math.round(Math.random() * (max - min) + min);
+      }
+
+      async function getWikiImageJson(titles){
+        var url = "https://en.wikipedia.org/w/api.php"; 
+        var params = {
+            action: "query",
+            format: "json",
+            prop: "imageinfo",
+            titles: "File:"+titles+".jpg"
+        };
+
+        url = url + "?origin=*";
+        Object.keys(params).forEach(function(key){url += "&" + key + "=" + params[key];});
+
+        var json = fetch(url)
+          .then(function(response){
+            console.log("test",response.json().value);
+            return response.json();
+          })
+          
+          .catch(function(error){console.log(error);});
+
+        return json.value;
+      }
+
+      function refreshStage(){
+        layer.draw();
+        var drop_down_selector = document.getElementById("drop_down_selector");
+        // console.log("selected:",drop_down_selector.value);
+        
+        for(let email_address_inner of email_address_map.keys()){
+          var person1 = email_address_map.get(email_address_inner);
+          var circle_in = person1.getPersonCircle();
+          var circle_text_in = person1.getPersonCircleText();
+          var circle_tooltip_in = person1.getPersonCircleTooltip();
+          var circle_tooltip_in1 = person1.getPersonCircleTooltip1();
+          var x_in = xOffset;
+          
+          if(drop_down_selector.value == "Total Email Size"){
+            x_in += normalizeXValue(person1.getCumulativeEmailSize());
+          }
+          else if (drop_down_selector.value == "Sent Email Size"){
+            if(person1.getCumulativeSentEmailSize()==0){
+              x_in += normalizeXValue(person1.getCumulativeEmailSize()/10);
+            }
+            else{
+              x_in += normalizeXValueSent(person1.getCumulativeSentEmailSize())
+            }
+          }
+          else if(drop_down_selector.value == "Response Latency"){
+            // x_in = normalizeXValueResponseTime(person1.getEmailTimeLatest(),person1.getSentEmailTimeLatest());
+            x_in += normalizeXValueAvgLatency(person1.getAverageLatency());
+          }
+          else if(drop_down_selector.value == "Significance"){
+            console.log(person1.getEmailAddress(),person1.getSignificance());
+            console.log("x:",normalizeXValueSignificance(person1.getSignificance()));
+            x_in += normalizeXValueSignificance(person1.getSignificance());
+          }
+          else if(drop_down_selector.value == "Urgency"){
+            x_in += normalizeXValueUrgency(person1.getUrgency());
+          }
+          else{
+            // Do nothing
+          }
+          circle_tooltip_in.tween = new Konva.Tween({
+            node: circle_tooltip_in,
+            x: x_in,
+            easing: Konva.Easings.EaseOut,
+            duration: 2
+          });
+          circle_tooltip_in1.tween = new Konva.Tween({
+            node: circle_tooltip_in1,
+            x: x_in,
+            easing: Konva.Easings.EaseOut,
+            duration: 2
+          });
+          circle_text_in.tween = new Konva.Tween({
+            node: circle_text_in,
+            x: x_in - 1.1 * circle_in.radius()/2,
+            easing: Konva.Easings.EaseOut,
+            duration: 2
+          });
+          circle_in.tween = new Konva.Tween({
+            node: circle_in,
+            x: x_in,
+            easing: Konva.Easings.EaseOut,
+            duration: 2
+          });
+          circle_in.tween.play();
+          circle_text_in.tween.play();
+          circle_tooltip_in.tween.play();
+          circle_tooltip_in1.tween.play();
+        }
+      }
+
+      function processEmail(){
+        
+        var drop_down_selector = document.getElementById("drop_down_selector");
+        drop_down_selector.disabled = false;
+        // console.log(drop_down_selector.value);
+
+        //
+        progressArc.hide();
+        progressPercentText.hide();
+        progressBarLayer.draw();
+        var email_count = email_response_list.length;
+        console.log("messages: ",email_response_list.length);
+        // Konva stuff
+     
+        var stage_emails = new Konva.Stage({
+          container: 'emails_container',
+          width: width + 50
+          // height: email_count * 50
+        });    
+
+        var layer_emails = new Konva.Layer();
+
+        var timeLabel = new Konva.Text({
+          x: xOffset + 15,
+          y: (yOffset + stage.height()) / 2,
+          text: 'Time',
+          fontSize: 30,
+          fontFamily: 'Calibri',
+          fill: 'black'
+        });
+
+        var nowTimeLabel = new Konva.Text({
+          x: xOffset + 15,
+          y: yOffset + 60,
+          text: 'Now',
+          fontSize: 30,
+          fontFamily: 'Calibri',
+          fill: 'grey'
+        });
+
+        var xTimeAgoLabel = new Konva.Text({
+          x: xOffset + 15,
+          y: stage.height() - 80,
+          text: 'x Days<br>ago',
+          fontSize: 30,
+          fontFamily: 'Calibri',
+          fill: 'grey'
+        });
+
+        // var importanceLabel = new Konva.Text({
+        //   x: stage.width() / 2 - 120,
+        //   y: yOffset - 30,
+        //   text: 'Importance',
+        //   fontSize: 30,
+        //   fontFamily: 'Calibri',
+        //   fill: 'black'
+        // });
+
+        // var moreImportanceLabel = new Konva.Text({
+        //   x: 150,
+        //   y: yOffset - 30,
+        //   text: 'More Important',
+        //   fontSize: 30,
+        //   fontFamily: 'Calibri',
+        //   fill: 'grey'
+        // });
+
+        // var lessImportanceLabel = new Konva.Text({
+        //   x: stage.width() - 400,
+        //   y: yOffset - 30,
+        //   text: 'Less Important',
+        //   fontSize: 30,
+        //   fontFamily: 'Calibri',
+        //   fill: 'grey'
+        // });
+
+        var selectedEmailAddressLabel = new Konva.Text({
+          x: stage.width() / 2 - 280,
+          y: stage.height() - 50,
+          text: 'No person selected',
+          fontSize: 30,
+          fontFamily: 'Calibri',
+          fill: 'black',
+          id: 'emailLabel'
+        });
+
+        layer.add(timeLabel);
+        // layer.add(importanceLabel);
+        layer.add(selectedEmailAddressLabel);
+        layer.add(nowTimeLabel);
+        layer.add(xTimeAgoLabel);
+        // layer.add(moreImportanceLabel);
+        // layer.add(lessImportanceLabel);
+
+
+        for(i=0;i<email_count;i++){
+
+          var response_1 = email_response_list[i];
+          // console.log(response_1);
+
+          var email_size = response_1.sizeEstimate;
+          // log
+          if(email_size!=0)
+            email_size = Math.log(email_size);
+            
+          var thread_id = response_1.threadId;
+          var email_payload = response_1.payload;
+
+          var payload_parts = email_payload.parts;
+          var attachment_size = 0;
+          if(payload_parts!=null){
+            for(part_i = 0; part_i < payload_parts.length; part_i++){
+              var part = payload_parts[part_i];
+              if(part.body.attachmentId!=null){
+                attachment_size += part.body.size;
+              }
+            }
+          }
+          // log
+          if(attachment_size!=0)
+            attachment_size = Math.log(attachment_size);
+
+          var arr = response_1.payload.headers;
+          var found_to = arr.filter(function(item) { return item.name.toLowerCase() === 'to'; });
+          var found_from = arr.filter(function(item) { return item.name.toLowerCase() === 'from'; });
+          var found_subject = arr.filter(function(item) { return item.name.toLowerCase() === 'subject'; });
+          var found_body = arr.filter(function(item) { return item.name.toLowerCase() === 'body'; });
+
+          var from = found_from[0].value;
+          var from_email = getEmailAddressFromString(from);
+          var subject = "";
+          if(found_subject[0]!=null){
+            subject = found_subject[0].value;
+            if(subject.length > 60){
+              subject = subject.substr(0,61) + "...";
+            }
+          }
+           
+          var snippet = response_1.snippet;
+          var email_date_val = response_1.internalDate;
+      
+          var e_date = new Date(email_date_val/1);
+          var simple_date = e_date.toString().substring(0,15);
+
+          var from_initials = from.split(" ");
+          var first_initial = getInitialLetter(from_initials[0]).toUpperCase();
+          var second_initial = getInitialLetter(from_initials[1]).toUpperCase();
+          var current_email_rect;
+          var current_email_rect_text;
+          var current_email_rect_text_right;
+
+          function displaySelectedEmails(selected_email_address){
+            // console.log("i: ",i);
+            stage_emails.height();
+         
+            var from_text = from;
+            var email_payload_val = email_payload;
+            var subject_val = subject;
+            var e_date_val = e_date;
+            var email_rect = new Konva.Rect({
+              x: 20,
+              y: 50*i,
+              width: width-30,
+              height: 50,
+              fill: 'grey',
+              stroke: 'black',
+              strokeWidth: 4
+            });
+            var email_text = new Konva.Text({
+              x: 20 + 10,
+              y: 50*i + 10,
+              text: first_initial + second_initial + " " + subject,
+              fontSize: 30,
+              fontFamily: 'Calibri',
+              draggable: false,
+              fill: 'black'
+            });
+            var email_text_right = new Konva.Text({
+              x: stage.width() - 300,
+              y: 50*i + 10,
+              text: simple_date,
+              fontSize: 30,
+              fontFamily: 'Calibri',
+              draggable: false,
+              fill: 'black'
+            });
+                  
+            current_email_rect = email_rect;
+            current_email_rect_text = email_text;
+            current_email_rect_text_right = email_text_right;
+
+            function toEmailMouseOver(){
+              document.body.style.cursor = 'pointer';
+              layer_emails.draw();
+            }
+            function toEmailMouseOut(){
+              document.body.style.cursor = 'default';
+              layer_emails.draw();
+            }
+
+            email_rect.on('mouseover', toEmailMouseOver);
+            email_text.on('mouseover', toEmailMouseOver);
+            email_text_right.on('mouseover', toEmailMouseOver);
+            email_rect.on('mouseout', toEmailMouseOut);
+            email_text.on('mouseout', toEmailMouseOut);
+            email_text_right.on('mouseout', toEmailMouseOut);
+
+            function onEmailClick(){
+              var e_window = window.open("pop_up.html","Email","width=1100,height=500,left=200,top=120,scrollbars=yes");
+              e_window.document.write("<p>From:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + getNameFromString(from_text) + " : " + getEmailAddressFromString(from_text) + "<br>"
+                                      + "Subject:&nbsp;&nbsp;&nbsp;&nbsp;" + subject_val + "<br>"
+                                      + "Time:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + e_date_val + "<br>"
+                                      + "<br>Body:<br>" + getBody(email_payload_val));  
+    
+            }
+
+            email_rect.on('click', onEmailClick);
+            email_text.on('click', onEmailClick);
+            email_text_right.on('click', onEmailClick);
+            email_rect.hide();
+            email_text.hide();
+            email_text_right.hide();
+
+            if(selected_email_address!=null){
+              var person_from_email = email_address_map.get(selected_email_address);
+              
+              for(let email_address_in of email_address_map.keys()){
+                var person_from_email_in = email_address_map.get(email_address_in);
+                var person_email_rect_in_list = person_from_email_in.getEmailRects();
+             
+                for(i = 0; i < person_email_rect_in_list.length; i++){
+                  var emailRectIn = person_email_rect_in_list[i];
+                  emailRectIn.getOwnEmailRec().hide();
+                  emailRectIn.getEmailRecText().hide();
+                  emailRectIn.getEmailRecTextRight().hide();
+                }
+              }
+
+              //
+              var email_thread_map = person_from_email.getThreadMap();
+              var email_iter = 0;
+              for (let key of email_thread_map.keys()){
+                var person_email_rect_list = email_thread_map.get(key);
+                for(i = 0; i < person_email_rect_list.length; i++){
+                  var emailRect = person_email_rect_list[i];
+                  if (emailRect.getFromEmail().includes(user_profile.getEmail())) {
+                    // console.log("to message",emailRect.getFromEmail());
+                  }
+                  else{
+                    // console.log("from message",emailRect.getFromEmail());
+                    emailRect.getOwnEmailRec().fill(person_from_email.getColor());
+                  }
+                  emailRect.getOwnEmailRec().show();
+                  emailRect.getOwnEmailRec().y(50*email_iter);
+                  emailRect.getEmailRecText().show();
+                  emailRect.getEmailRecText().y(50*email_iter + 10);
+                  emailRect.getEmailRecTextRight().show();
+                  emailRect.getEmailRecTextRight().y(50*email_iter + 10);
+                  email_iter++;
+                }
+                email_iter += 0.3;
+              }
+              stage_emails.height(email_iter* 50);
+
+              //
+
+            }
+            layer_emails.add(email_rect);
+            layer_emails.add(email_text);
+            layer_emails.add(email_text_right);
+
+            iter++;
+          }
+          displaySelectedEmails();
+
+          if (min_time > email_date_val) {
+            min_time = email_date_val;
+          }
+          if (max_time < email_date_val) {
+            max_time = email_date_val;
+          }
+
+          if (from.includes(user_profile.getEmail())) {
+            current_email_rect.fill('grey');
+            self.addEmailRects(current_email_rect,current_email_rect_text,current_email_rect_text_right,thread_id,user_profile.getEmail());  
+            var person_to;
+            if(found_to[0]!=null){
+              var person_to_email = getEmailAddressFromString(found_to[0].value);
+              if(email_address_map.has(person_to_email)){
+                person_to = email_address_map.get(person_to_email);
+                if(person_to.getEmailTimeLatest() < email_date_val){
+                  person_to.setEmailTimeLatest(email_date_val);
+                }
+                if(person_to.getSentEmailTimeLatest()==null){
+                  person_to.setSentEmailTimeLatest(email_date_val);
+                }
+                if(person_to.getSentEmailTimeLatest() < email_date_val){
+                  person_to.setSentEmailTimeLatest(email_date_val);
+                }
+                
+              }
+              else{
+                person_to = new Person(person_to_email);
+
+                var email_date_val = response_1.internalDate;
+                var from_initials = found_to[0].value.split(" ");
+                var first_initial = getInitialLetter(from_initials[0]).toUpperCase();
+                var second_initial = getInitialLetter(from_initials[1]).toUpperCase();
+                person_to.setInitials(first_initial+second_initial);              
+                person_to.setEmailTimeLatest(email_date_val);
+                person_to.setSentEmailTimeLatest(email_date_val);
+                // console.log(person_to);
+                email_address_map.set(person_to_email,person_to);
+              }
+              // var time_diff = Math.abs(person_to.getEmailTimeLatest()-person_to.getSentEmailTimeLatest());
+              // if(time_diff < min_time_diff){
+              //   min_time_diff = time_diff;
+              // }
+              // if(time_diff > max_time_diff){
+              //   max_time_diff = time_diff;
+              // }
+              person_to.addEmailRects(current_email_rect,current_email_rect_text,current_email_rect_text_right,thread_id,user_profile.getEmail());  
+              person_to.addEmailSize(email_size);
+              person_to.addSentEmailSize(email_size);
+              person_to.updateSentEmails(1);
+              person_to.addSentEmailSize(-attachment_size);
+              person_to.addEmailSize(-attachment_size);
+              person_to.addEmailMessage(response_1,0);
+            }
+          }
+          else{
+            var person;
+            if(email_address_map.has(from_email)){
+              person = email_address_map.get(from_email);
+              if(person.getEmailTimeLatest() < email_date_val){
+                  person.setEmailTimeLatest(email_date_val);
+              }
+            }
+            else{
+              person = new Person(from);
+              
+              var email_date_val = response_1.internalDate;
+              var from_initials = from.split(" ");
+              var first_initial = getInitialLetter(from_initials[0]).toUpperCase();
+              var second_initial = getInitialLetter(from_initials[1]).toUpperCase();
+              person.setInitials(first_initial+second_initial);
+              person.setEmailTimeLatest(email_date_val);
+              //
+              email_address_map.set(from_email,person);
+            }
+            // var time_diff = Math.abs(person.getEmailTimeLatest()-person.getSentEmailTimeLatest());
+            // if(time_diff < min_time_diff){
+            //   min_time_diff = time_diff;
+            // }
+            // if(time_diff > max_time_diff){
+            //   max_time_diff = time_diff;
+            // }
+            person.addEmailRects(current_email_rect,current_email_rect_text,current_email_rect_text_right,thread_id,from_email);  
+            person.addEmailSize(email_size);
+            person.addEmailSize(-attachment_size);
+            person.updateReceivedEmails(1);
+            person.addEmailMessage(response_1,1);
+          }
+        }
+
+        //
+        for(let email_address of email_address_map.keys()){
+          var temp_person = email_address_map.get(email_address);
+          if(min_email_size==0){
+            min_email_size = temp_person.getCumulativeEmailSize();
+          }
+          if(min_email_size > temp_person.getCumulativeEmailSize()){
+            min_email_size = temp_person.getCumulativeEmailSize();
+          }
+          if(max_email_size < temp_person.getCumulativeEmailSize()){
+            max_email_size = temp_person.getCumulativeEmailSize();
+          }
+
+          if(min_sent_email_size==0){
+            min_sent_email_size = temp_person.getCumulativeSentEmailSize();
+          }
+          if(min_sent_email_size > temp_person.getCumulativeSentEmailSize()){
+            min_sent_email_size = temp_person.getCumulativeSentEmailSize();
+          }
+          if(max_sent_email_size < temp_person.getCumulativeSentEmailSize()){
+            max_sent_email_size = temp_person.getCumulativeSentEmailSize();
+          }
+
+          //
+          // Calculate average latencies
+          var latency_cnt = 0;
+          var total_latency = 0;
+          var sent_time = 0;
+          var received_time = 0;
+          var message_list = temp_person.getEmailMessageList();
+          var current_latency = 0;
+          for(let email_message of message_list){
+            var sender_map = temp_person.getEmailMessageSenderMap();
+            var sender = sender_map.get(email_message.id);
+
+            if(sender==0){ // User has sent
+              sent_time = email_message.internalDate;
+              if(received_time!=0){
+                current_latency = Math.abs(sent_time-received_time);
+                total_latency += current_latency;
+                latency_cnt++;
+              }
+            }
+            else{ // User has received
+              received_time = email_message.internalDate;
+            }
+          }
+
+          if(latency_cnt!=0){
+            var avg_latency = total_latency/latency_cnt
+            temp_person.setAverageLatency(avg_latency);
+            temp_person.setLatestLatency(current_latency);
+            var urgency = temp_person.getUrgency();
+            var significance = temp_person.getSignificance();
+            if(min_avg_latency == 0 || min_avg_latency > avg_latency){
+              min_avg_latency = avg_latency;
+            }
+            if(max_avg_latency < avg_latency){
+              max_avg_latency = avg_latency;
+            }
+            if(min_urgency == 0 || min_urgency > urgency){
+              min_urgency = urgency;
+            }
+            if(max_urgency < urgency){
+              max_urgency = urgency;
+            }
+            if(min_significance == 0 || min_significance > significance){
+              min_significance = significance;
+            }
+            if(max_significance < significance){
+              max_significance = significance;
+            }
+            // console.log("person:",email_address);
+            // console.log("avg late:",avg_latency);
+          }
+          
+          //
+        }
+        if(min_avg_latency==max_avg_latency){
+          max_avg_latency = 2*min_avg_latency;
+        }
+        if(min_urgency==max_urgency){
+          max_urgency = 2*min_urgency;
+        }
+        if(min_significance==max_significance){
+          max_significance = 2;
+        }
+        console.log("min sig:",min_significance);
+        console.log("max sig:",max_significance);
+
+        // console.log(email_address_map);
+        xTimeAgoLabel.text(convertTimeLabel(max_time-min_time))
+
+        // Display each email address as a circle
+        var i1 = 0;
+        var colorStep = 0.9/email_address_map.size;
+        for(let email_address of email_address_map.keys()){
+          var person = email_address_map.get(email_address);
+          var email_date_val = person.getEmailTimeLatest();
+
+          if(person.getAverageLatency()==-1 || person.getAverageLatency() == null){
+            person.setAverageLatency(max_avg_latency);
+          }
+          // console.log("avg lat",person.getAverageLatency());
+          //
+          // Check which importance measure is checked
+          //
+          var y_cood = yOffset + normalizeYValue(email_date_val);
+          var x_cood = xOffset + normalizeXValue(person.getCumulativeEmailSize());
+          
+          
+          // console.log("person: ",person.getEmailAddress());
+          // console.log("diff:",person.getEmailTimeLatest()-person.getSentEmailTimeLatest());
+          
+          person.setX(x_cood);
+          person.setY(y_cood);
+          i1++;
+
+          //
+          (function(){
+
+            if(stratifiedSamplingFlag){
+              var randomSquare = getRandomIntInRange(0,stratifiedSampleMap.size - 1);
+              console.log("r square",randomSquare);
+              while(!stratifiedSampleMap.has(randomSquare)){
+                randomSquare = getRandomIntInRange(0,stratifiedSampleMap.size - 1);
+              }
+              var s1 = stratifiedSampleMap.get(randomSquare);
+
+              h_random = getRandomInRange(s1.getHMin(),s1.getHMin());
+              s_random = getRandomInRange(s1.getSMin(),s1.getSMax());
+
+              console.log("per square ",email_address_map.size / stratifiedSamplesCount);
+              if(s1.getCnt() >= email_address_map.size / stratifiedSamplesCount){
+                stratifiedSampleMap.delete(randomSquare);
+              }
+              else{
+                s1.increaseCnt();
+              }
+
+            }
+            else{
+              h_random = getRandomInRange(h_default,h_default+colorStep);
+              s_random = getRandomInRange(s_default,s_default+colorStep);
+            }
+            h_default += colorStep;
+            s_default += colorStep;
+
+            var circleRadius = Math.min(circle_max_radius,email_person_circle_base_radius + email_person_circle_radius * person.getNumberOfEmails());
+            var rgb = HSVtoRGB(h_random,s_random,v_default);
+            var defaultColor = getRGBString(rgb.r,rgb.g,rgb.b);
+            var image_url = "https://www.gravatar.com/avatar/" + md5(email_address) + "?d=404"
+
+
+            var tooltip = new Konva.Label({
+              x: x_cood,
+              y: y_cood-(circleRadius),
+            });
+
+            var tooltip1 = new Konva.Label({
+              x: x_cood,
+              y: y_cood-(circleRadius),
+            });
+
+
+            var tooltipRect = new Konva.Rect({
+              fill:defaultColor,
+              width: tooltipRectSideLength,
+              height: tooltipRectSideLength,
+              x: -tooltipRectSideLength/2,
+              y: -45 -tooltipRectSideLength
+            });
+
+            var tooltipRectText = new Konva.Text({
+              x: - tooltipRectSideLength/3,
+              y: - 18 - tooltipRectSideLength,
+              text: person.getInitials() ,
+              fontSize: tooltipRectSideLength / 2,
+              fontFamily: 'Calibri',
+              draggable: false,
+              fill: 'black'
+            });
+
+            tooltip1.add(tooltipRect);
+            tooltip1.add(tooltipRectText);
+            tooltip.add(
+              new Konva.Tag({
+                fill: 'black',
+                pointerDirection: 'down',
+                pointerWidth: 10,
+                pointerHeight: 10,
+                lineJoin: 'round',
+              })
+            );
+
+            tooltip.add(
+              new Konva.Text({
+                text: email_address,
+                fontFamily: 'Calibri',
+                fontSize: 18,
+                padding: 5,
+                fill: 'white'
+              })
+            );
+            tooltip.hide();
+            tooltip1.hide();
+            //
+            
+            // console.log(defaultColor,colorStep);
+            var email_person_circle = new Konva.Circle({
+              x: x_cood,
+              y: y_cood,
+              radius: circleRadius,
+              stroke: 'black',
+              fill: defaultColor,
+              draggable: false,
+              hue: 0,
+              saturation: 2,
+              strokeWidth: 2
+            });
+
+            var strokeWidth = 4;
+            var strokeIncrement = 0.1;
+            var anim = new Konva.Animation(function(frame) {
+              var time = frame.time,
+                  timeDiff = frame.timeDiff,
+                  frameRate = frame.frameRate;
+             
+              // update stuff
+              var maxStrokeWidth = 5;
+              if(strokeWidth >= maxStrokeWidth || strokeWidth <= 0){
+                strokeIncrement = -strokeIncrement;
+              }
+              strokeWidth += strokeIncrement;
+              email_person_circle.strokeWidth(strokeWidth);
+              email_person_circle.stroke('red');
+              // email_person_circle.stroke(email_person_circle.fill());
+            }, layer);
+            
+            
+            var email_person_text = new Konva.Text({
+              x: email_person_circle.x() - 1.1 * email_person_circle.radius()/2,
+              y: email_person_circle.y() - 0.9 * email_person_circle.radius()/2,
+              text: person.getInitials() ,
+              fontSize: email_person_circle.radius() * 0.9,
+              fontFamily: 'Calibri',
+              draggable: false,
+              fill: 'black'
+            });
+
+            function onCircleClick(){             
+              //
+              for(let email_address_inner of email_address_map.keys()){
+               
+                var person1 = email_address_map.get(email_address_inner);
+                var circle_in = person1.getPersonCircle();
+                circle_in.strokeWidth(2);
+                circle_in.stroke('black');
+                circle_in.shadowColor('black');
+                var anim_in = person1.getAnim();
+                anim_in.stop();
+              }
+              anim.start();
+              email_person_circle.moveToTop();
+              email_person_text.moveToTop();
+              email_person_circle.shadowColor('red');
+
+              selectedEmailAddressLabel.text(email_address);
+              layer.draw();
+
+              displaySelectedEmails(email_address);
+              layer_emails.draw();
+              //
+              var person2 = email_address_map.get(email_address);
+              
+            }
+
+            function onCircleHover(){
+              var labels = stage.find('Label');
+              labels.each(function(label) {
+                label.hide();
+              });
+              document.body.style.cursor = 'pointer';
+              tooltip.show();
+              tooltip.moveToTop();
+              tooltip1.show();
+              tooltip1.moveToTop();
+              layer.draw();
+            }
+
+            email_person_text.on('click', onCircleClick);
+            email_person_circle.on('click', onCircleClick);
+
+            email_person_text.on('mouseover', onCircleHover);
+            email_person_circle.on('mouseover', onCircleHover);
+
+            email_person_circle.on('mouseout', function() {
+              document.body.style.cursor = 'default';
+              tooltip.hide();
+              tooltip1.hide();
+              layer.draw();
+            });
+
+            var json_url;
+
+            // if(!imageExists(image_url)){
+            //   json_url = getWikiImageJson("Billy Tipton");
+            // }
+            // console.log(person.getEmailAddress(),json_url
+
+
+            if(imageExists(image_url)){
+              tooltipRect.fillPriority('pattern');
+              email_person_circle.fillPriority('pattern');
+              var imageObj = new Image();
+              imageObj.onload = function() {
+                email_person_circle.fillPatternImage(imageObj)
+                tooltipRect.fillPatternImage(imageObj);
+                tooltipRect.fillPatternScale({
+                  x: tooltipRectSideLength/imageObj.width,
+                  y: tooltipRectSideLength/imageObj.height
+                });
+                email_person_circle.fillPatternScale({
+                  x: 2*email_person_circle.radius()/imageObj.width,
+                  y: 2*email_person_circle.radius()/imageObj.height
+                });
+                imageObj.height = 200;
+                imageObj.width = 200;
+                email_person_circle.fillPatternX(email_person_circle.radius());
+                email_person_circle.fillPatternY(email_person_circle.radius());
+                email_person_text.hide();
+                tooltipRectText.hide();
+
+                layer.batchDraw();
+              };
+              imageObj.src = image_url;
+            }
+            else{
+              if(localImagesFlag){
+                if(local_image_counter <= 30){
+                  image_url = "images1/i"+local_image_counter+".jpg";
+                  tooltipRect.fillPriority('pattern');
+                  email_person_circle.fillPriority('pattern');
+                  var imageObj = new Image();
+                  imageObj.onload = function() {
+                    email_person_circle.fillPatternImage(imageObj)
+                    tooltipRect.fillPatternImage(imageObj);
+                    tooltipRect.fillPatternScale({
+                      x: tooltipRectSideLength/imageObj.width,
+                      y: tooltipRectSideLength/imageObj.height
+                    });
+                   
+                    email_person_circle.fillPatternScale({
+                      x: 2*email_person_circle.radius()/imageObj.width,
+                      y: 2*email_person_circle.radius()/imageObj.height
+                    });
+                    imageObj.height = 200;
+                    imageObj.width = 200;
+                    email_person_circle.fillPatternX(email_person_circle.radius());
+                    email_person_circle.fillPatternY(email_person_circle.radius());
+                    email_person_text.hide();
+                    tooltipRectText.hide();
+
+                    layer.batchDraw();
+                  };
+                  imageObj.src = image_url;
+                  local_image_counter++;
+                }
+                else{
+                  // console.log("404");
+                }
+              }
+              image_url = null;
+            }
+            if(person.getSentEmailTimeLatest() >= person.getEmailTimeLatest()){
+              email_person_circle.shadowBlur(0);
+            }
+            else{
+              email_person_circle.shadowBlur(10);
+            }
+            
+            person.setColor(defaultColor);
+            person.setPersonCircle(email_person_circle);
+            person.setPersonCircleText(email_person_text);
+            person.setPersonCircleTooltip(tooltip);
+            person.setPersonCircleTooltip1(tooltip1);
+            person.setAnim(anim);
+
+            layer.add(email_person_circle);
+            layer.add(email_person_text);
+            layer.add(tooltip);
+            layer.add(tooltip1);
+          })();
+        }
+        
+        stage_emails.add(layer_emails);
+        stage.add(layer);
+        console.log("process in i: ",email_response_list.length);
+      }
+
+      function convertTimeLabel(diff){
+        var output_string = "no diff";
+        if(diff/1000 > 1){
+          // more than 1 second
+          diff = diff/1000;
+          if(diff/60 > 1){
+            // more than 1 minute
+            diff = diff/60;
+            if(diff/60 > 1){
+              // more than 1 hour
+              diff = diff/60;
+              if(diff/24 > 1){
+                // more than 1 day
+                diff = diff/24;
+                if(diff/7 > 1){
+                  // more than 1 week
+                  diff = diff/7;
+                  if(diff*7/30 > 1){
+                    // more than 1 month
+                    diff = diff*7/30;
+                    if(diff/12 > 1){
+                      // more than 1 year
+                      diff = diff/12;
+                      output_string = Math.round(diff) + " years\nago";
+                    }
+                    else{
+                      output_string = Math.round(diff) + " months\nago";
+                    }
+                  }
+                  else{
+                    output_string = Math.round(diff) + " weeks\nago";
+                  }
+                }
+                else{
+                  output_string = Math.round(diff) + " days\nago";
+                }
+              }
+              else{
+                output_string = Math.round(diff) + " hours\nago";
+              }
+            }
+            else{
+              output_string = Math.round(diff) + " minutes\nago";
+            }
+          }
+          else{
+            output_string = Math.round(diff) + " seconds\nago";
+          }
+        }
+        return output_string;
+      }
+
+      function getNameFromString(s){
+        if(s==null){
+          return s;
+        }
+        var start = 0;
+        var end = s.indexOf("<") - 1;
+        return s.substring(start,end);
+      }
+
+      function getEmailAddressFromString(s){
+        if(s==null){
+          return s;
+        }
+        var start = s.indexOf("<") + 1;
+        var end = s.indexOf(">");
+        if(end<=0){
+          end = s.length;
+        }
+        return s.substring(start,end);
+      }
+
+
+      function normalizeXValueSignificance(val){
+        if(Number.isNaN(val) || val == null){
+          return 200;
+        }
+        if(max_sent_email_size!=min_sent_email_size){
+          if(val >= max_significance){
+            return 200;
+          }
+          if(val <= min_significance){
+            return width-200;
+          }
+          return (width-400)*(max_significance - val) / (max_significance-min_significance) + 200;
+        }
+        else{
+          return (width-400)*(max_significance - val) / (max_significance) + 200;
+        }
+      }
+
+
+      function normalizeXValueUrgency(val){
+        if(val == null){
+          return 200;
+        }
+        if(max_sent_email_size!=min_sent_email_size){
+          if(val >= max_urgency){
+            return 200;
+          }
+          if(val <= min_urgency){
+            return width-200;
+          }
+          return (width-400)*(max_urgency - val) / (max_urgency-min_urgency) + 200;
+        }
+        else{
+          return (width-400)*(max_urgency - val) / (max_urgency) + 200;
+        }
+      }
+
+      function normalizeXValueAvgLatency(val){
+        if(val == null){
+          return width-200;
+        }
+        if(max_sent_email_size!=min_sent_email_size){
+          if(val >= max_avg_latency){
+            return width-200;
+          }
+          if(val <= min_avg_latency){
+            return 200;
+          }
+          return (width-400)*(val-min_avg_latency) / (max_avg_latency-min_avg_latency) + 200;
+        }
+        else{
+          return (width-400)*(val-min_avg_latency) / (max_avg_latency-min_avg_latency) + 200;
+        }
+      }
+
+      function normalizeXValueResponseTime(emailTime,sentEmailTime){
+        if(sentEmailTime==null){
+          return width-200;
+        }
+        var val = Math.abs(emailTime-sentEmailTime);
+        return (width-400)*(val) / (max_time_diff) + 200;
+      }
+
+      function normalizeXValueSent(val){
+        if(max_sent_email_size!=min_sent_email_size){
+          if(val >= max_sent_email_size){
+            return 200
+          }
+          if(val <= min_sent_email_size){
+            return width-200;
+          }
+          return (width-400)*(max_sent_email_size-val) / (max_sent_email_size-min_sent_email_size) + 200;
+        }
+        else{
+          return (width-400)*(max_sent_email_size-val) / (max_sent_email_size) + 200;
+        }
+      }
+
+      function normalizeXValue(val){
+        if(max_email_size!=min_email_size){
+          if(max_email_size==val){
+            return 200
+          }
+          if(val < min_email_size){
+            return width-200;
+          }
+          return (width-400)*(max_email_size-val) / (max_email_size-min_email_size) + 200;
+        }
+        else{
+          return (width-400)*(max_email_size-val) / (max_email_size) + 200;
+        }
+      }
+
+      function normalizeYValue(val){
+        if(max_time!=min_time){
+          return (height-360)*(max_time-val) / (max_time-min_time) + 100;
+        }
+        else{
+          return (height-360)*(max_time-val) / (max_time) + 100;
+        }
+      }
+
+      function isAlphanumeric(inputtxt){
+        var letterNumber = /^[a-zA-Z]+$/;
+        if((inputtxt.match(letterNumber)) ) {
+          return true;
+        }
+        else{ 
+          return false; 
+        }
+      }
+
+      function getInitialLetter(text){
+        var pos = 0;
+        if(text==null){
+          return 'X';
+        }
+        var c = text.charAt(pos);
+        while(pos < text.length){
+          c = text.charAt(pos);
+          if(isAlphanumeric(c)){
+            break;
+          }
+          else{
+            pos++;
+          }
+        }
+        return c;
+      }
+
+      function callNextPage(){
+        gapi.client.gmail.users.messages.list({
+        'userId': 'me',
+        'pageToken': nextPageToken
+        }).then(async function(response) {
+          var messages = response.result.messages;    
+          nextPageToken = response.result.nextPageToken;
+          if (messages && messages.length > 0) {
+            for (i = 0; i < messages.length; i++) {
+
+              var progressArcIncrement = 360/totalMessagesCount;
+              var progressPercentIncrement = 100/totalMessagesCount;
+              var message = await gapi.client.gmail.users.messages.get({
+              'userId': 'me',
+              'id': messages[i].id
+              }).then(function(response) {
+                  // Handle the results here (response.result has the parsed body).
+                  progressAngle += progressArcIncrement;
+                  progressPercent += progressPercentIncrement;
+                  progressPercentText.text(Math.max(0,Math.floor(progressPercent))+"%");
+                  progressArc.angle(Math.max(0,progressAngle));
+                  progressBarLayer.draw();
+                  if(!email_response_list.includes(response.result))
+                    email_response_list.push(response.result);
+                  return response.result;
+              
+              }).catch(function(err) { console.error("Execute error", err); });
+              // console.log("p2",message.snippet);
+            }
+            if(nextPageToken == null || email_response_list.length >= maxMessageCount){
+              processEmail();
+            }
+            else{
+              callNextPage();
+            }
+            
+
+          } else {
+            appendPre('No Messages found.','content');
+          }
+
+        });
+      }
+      function getMessageCount(){
+        gapi.client.gmail.users.messages.list({
+        'userId': 'me',
+        'pageToken': nextPageToken
+        }).then(function(response) {
+          totalMessagesCount += response.result.messages.length; 
+          nextPageToken = response.result.nextPageToken;
+          if(nextPageToken == null || totalMessagesCount >= maxMessageCount){
+              if(totalMessagesCount >= maxMessageCount){
+                totalMessagesCount = maxMessageCount;
+                nextPageToken = null;
+              }
+              callNextPage();
+            }
+          else{
+            getMessageCount();
+          }   
+        });
+      }
+      function listMessages() {
+        progressArc.show();
+        progressPercentText.show();
+        progressBarLayer.draw();
+        getMessageCount();
+        
+      }
+
+    </script>
+
+    <script async defer src="https://apis.google.com/js/api.js"
+      onload="this.onload=function(){};handleClientLoad()"
+      onreadystatechange="if (this.readyState === 'complete') this.onload()">
+    </script>
+  </body>
+</html>
